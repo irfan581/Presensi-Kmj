@@ -208,16 +208,13 @@ class PresensiResource extends Resource
                     . Carbon::parse($tglSampai)->format('d/m/Y');
 
         $salesIds = $presensi->pluck('sales_id')->unique();
-
-        // ✅ FIX N+1 PDF: eager load sales di kunjungan sekaligus
-        // Sebelumnya: $k->sales->nama di foreach = N query
         $kunjungan = KunjunganToko::whereIn('sales_id', $salesIds)
             ->whereBetween('created_at', [
                 Carbon::parse($tglDari)->startOfDay(),
                 Carbon::parse($tglSampai)->endOfDay(),
             ])
             ->select(['id', 'sales_id', 'nama_toko', 'location', 'keterangan', 'is_suspicious', 'suspicious_reason', 'created_at'])
-            ->with('sales:id,nama') // ✅ Eager load — tidak N+1 lagi
+            ->with('sales:id,nama') 
             ->get();
 
         $combined = collect();

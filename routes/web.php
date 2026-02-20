@@ -2,6 +2,5 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Biar pas buka IP langsung masuk ke gerbang Filament
+Route::redirect('/', '/admin');
