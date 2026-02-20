@@ -4,7 +4,7 @@ namespace App\Observers;
 
 use App\Models\Izin;
 use App\Models\User;
-use App\Models\NotifikasiSales; // Menggunakan model custom untuk riwayat Flutter
+use App\Models\NotifikasiSales; 
 use App\Jobs\ProcessIzin;
 use App\Services\FcmService;
 use Filament\Notifications\Notification as FilamentNotification; 

@@ -119,7 +119,7 @@ class KunjunganTokoResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                // Tables\Actions\EditAction::make(), <--- INI UDAH GUE HAPUS BANG
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([

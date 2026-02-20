@@ -1,86 +1,100 @@
 <?php
 
-namespace App\Observers;
+namespace App\Providers;
 
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Pagination\Paginator;
+use Livewire\Livewire;
+
+// Models
+use App\Models\Presensi;
+use App\Models\KunjunganToko;
 use App\Models\Izin;
-use App\Models\User;
-use App\Jobs\ProcessIzin;
-use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Cache;
 
-class IzinObserver
+// Observers
+use App\Observers\PresensiObserver;
+use App\Observers\KunjunganTokoObserver;
+use App\Observers\IzinObserver;
+
+// Filament Breezy Components
+use Jeffgreco13\FilamentBreezy\Livewire\TwoFactorAuthentication;
+use Jeffgreco13\FilamentBreezy\Livewire\PersonalInfo;
+use Jeffgreco13\FilamentBreezy\Livewire\UpdatePassword;
+
+class AppServiceProvider extends ServiceProvider
 {
     /**
-     * Trigger saat Sales buat izin baru dari Flutter.
+     * Register any application services.
      */
-    public function created(Izin $izin): void
+    public function register(): void
     {
-        // 1. Proses kompresi foto di background agar upload terasa cepat
-        if ($izin->bukti_foto) {
-            ProcessIzin::dispatch($izin->id, $izin->bukti_foto);
-        }
-
-        // 2. Notifikasi ke Dashboard Admin Filament
-        $nama = $izin->sales->nama ?? 'Sales';
-        $admins = User::where('is_admin', true)->orWhere('role', 'admin')->get();
-
-        if ($admins->isNotEmpty()) {
-            Notification::make()
-                ->title('Pengajuan Izin Baru')
-                ->body("**{$nama}** mengajukan izin {$izin->jenis_izin}.")
-                ->warning()
-                ->icon('heroicon-o-document-text')
-                ->sendToDatabase($admins);
-        }
-
-        // 3. Reset cache dashboard (biar angka statistik update)
-        Cache::forget('izin_pending_count');
-    }
-
-    /**
-     * Trigger saat Admin klik ACC atau TOLAK di Filament.
-     */
-    public function updated(Izin $izin): void
-    {
-        // Hanya jalan jika statusnya berubah (disetujui/ditolak)
-        if ($izin->wasChanged('status')) {
-            $sales = $izin->sales;
-
-            if ($sales) {
-                $isApproved = $izin->status === 'disetujui';
-                $statusColor = $isApproved ? 'success' : 'danger';
-                $statusLabel = $isApproved ? 'DISETUJUI ✅' : 'DITOLAK ❌';
-                
-                // Ambil alasan dari kolom database terbaru
-                $alasan = $izin->alasan_tolak ? "\nAlasan: {$izin->alasan_tolak}" : "";
-                $pesan = "Izin {$izin->jenis_izin} untuk tanggal {$izin->tanggal->format('d/m/Y')} telah {$statusLabel}.{$alasan}";
-
-                // Kirim notifikasi ke aplikasi Flutter (Database Notification)
-                Notification::make()
-                    ->title('Update Status Izin')
-                    ->body($pesan)
-                    ->{$statusColor}()
-                    ->icon($isApproved ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
-                    ->sendToDatabase($sales);
-
-                // TIPS: Jika Bos sudah punya FCM, panggil fungsi kirim push notif di sini
-            }
-
-            Cache::forget('izin_pending_count');
+        // ✅ Register Telescope hanya jika di environment lokal agar hemat resource di server
+        if ($this->app->environment('local')) {
+            $this->app->register(\Laravel\Telescope\TelescopeServiceProvider::class);
+            $this->app->register(TelescopeServiceProvider::class);
         }
     }
 
     /**
-     * Trigger saat data dihapus.
+     * Bootstrap any application services.
      */
-    public function deleted(Izin $izin): void
+    public function boot(): void
     {
-        // Hapus file agar storage tidak penuh sampah
-        if ($izin->bukti_foto) {
-            Storage::disk('public')->delete($izin->bukti_foto);
-        }
-        
-        Cache::forget('izin_pending_count');
+        // ─── UI & Pagination ──────────────────────────────────
+        Paginator::useTailwind();
+
+        // ─── Livewire Components ──────────────────────────────
+        Livewire::component('personal_info', PersonalInfo::class);
+        Livewire::component('update_password', UpdatePassword::class);
+        Livewire::component('two-factor-authentication', TwoFactorAuthentication::class);
+        Livewire::component('two_factor_authentication', TwoFactorAuthentication::class);
+
+        // ─── Observers ────────────────────────────────────────
+        // Pastikan file observer ini ada di folder app/Observers/
+        Presensi::observe(PresensiObserver::class);
+        KunjunganToko::observe(KunjunganTokoObserver::class);
+        Izin::observe(IzinObserver::class);
+
+        // ─── Rate Limiters ────────────────────────────────────
+        $this->configureRateLimiting();
+    }
+
+    /**
+     * Configure the rate limiters for the application.
+     */
+    protected function configureRateLimiting(): void
+    {
+        // ✅ LOGIN: Mencegah brute force (10 percobaan/menit per IP)
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(10)
+                ->by($request->ip())
+                ->response(fn() => response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak percobaan login. Coba lagi dalam 1 menit.',
+                ], 429));
+        });
+
+        // ✅ UPLOAD: Membatasi upload foto (20 request/menit per user)
+        RateLimiter::for('upload', function (Request $request) {
+            return Limit::perMinute(20)
+                ->by($request->user()?->id ?? $request->ip())
+                ->response(fn() => response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak upload. Mohon tunggu sebentar.',
+                ], 429));
+        });
+
+        // ✅ SENSITIVE: Ganti password & reset (5 request/menit per user)
+        RateLimiter::for('sensitive', function (Request $request) {
+            return Limit::perMinute(5)
+                ->by($request->user()?->id ?? $request->ip())
+                ->response(fn() => response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak percobaan. Coba lagi dalam 1 menit.',
+                ], 429));
+        });
     }
 }

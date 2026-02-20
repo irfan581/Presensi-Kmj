@@ -1,7 +1,4 @@
 <?php
-// ═══════════════════════════════════════════════════════════
-// FILE: app/Filament/Widgets/AbsentSales.php
-// ═══════════════════════════════════════════════════════════
 
 namespace App\Filament\Widgets;
 
@@ -10,12 +7,14 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class AbsentSales extends BaseWidget
 {
     protected static ?int $sort = 4;
     protected int|string|array $columnSpan = 'full';
     protected static ?string $heading = 'Sales Belum Absen (Hari Ini)';
+    protected static ?string $pollingInterval = '30s';
     protected static bool $isLazy = true;
 
     public function table(Table $table): Table
@@ -23,22 +22,21 @@ class AbsentSales extends BaseWidget
         $today = Carbon::today('Asia/Jakarta')->toDateString();
 
         return $table
+            ->deferLoading()
             ->query(
-                // ✅ OPT: 1 query dengan whereDoesntHave + subquery
-                // Lebih bersih dari 2 query (pluck + whereNotIn)
-                // MySQL optimizer handle subquery ini dengan baik karena ada index sales_id+tanggal
                 Sales::query()
-                    ->select(['id', 'nama', 'area', 'no_hp']) // ✅ Pilih kolom minimum
+                    ->select(['id', 'nama', 'area', 'no_hp'])
                     ->where('is_active', true)
-                    ->whereDoesntHave('presensi', function ($q) use ($today) {
-                        $q->where('tanggal', $today);
-                    })
+                    ->whereDoesntHave('presensi', fn (Builder $query) => 
+                        $query->whereDate('tanggal', $today)
+                    )
                     ->orderBy('nama')
             )
             ->columns([
                 Tables\Columns\TextColumn::make('nama')
                     ->label('Nama Sales')
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('area')
                     ->badge()
@@ -55,6 +53,6 @@ class AbsentSales extends BaseWidget
                     )
                     ->openUrlInNewTab(),
             ])
-            ->paginated(false); // ✅ 7 sales — tidak perlu pagination
+            ->paginated(false);
     }
 }

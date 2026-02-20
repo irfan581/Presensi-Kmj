@@ -6,8 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Support\Facades\Storage;
 
 class Presensi extends Model
 {
@@ -16,15 +14,25 @@ class Presensi extends Model
     protected $table = 'presensis';
 
     protected $fillable = [
-        'sales_id', 'tanggal',
-        'jam_masuk', 'jam_perangkat_masuk', 'status',
-        'foto_masuk', 'location_masuk', 'lat_masuk', 'lng_masuk',
-        'jam_pulang', 'jam_perangkat_pulang',
-        'foto_pulang', 'location_pulang', 'lat_pulang', 'lng_pulang',
-        'keterangan', 'is_suspicious', 'suspicious_reason',
+        'sales_id', 
+        'tanggal',
+        'jam_masuk', 
+        'jam_perangkat_masuk', 
+        'status',
+        'foto_masuk', 
+        'location_masuk', 
+        'lat_masuk', 
+        'lng_masuk',
+        'jam_pulang', 
+        'jam_perangkat_pulang',
+        'foto_pulang', 
+        'location_pulang', 
+        'lat_pulang', 
+        'lng_pulang',
+        'keterangan', 
+        'is_suspicious', 
+        'suspicious_reason',
     ];
-
-    protected $hidden = [];
 
     protected $casts = [
         'tanggal'       => 'date:Y-m-d',
@@ -39,42 +47,44 @@ class Presensi extends Model
         'status_label',
     ];
 
-    // ===========================================================
-    // ACCESSOR
-    // ===========================================================
+    // --- ACCESSORS ---
 
-    private function buildFotoUrl(?string $path): ?string
-    {
-        if (empty($path)) return null;
-        if (str_contains($path, 'temp-absen/')) return null;
-
-        /** @var FilesystemAdapter $disk */
-        $disk = Storage::disk('public');
-        return $disk->url($path);
-    }
-
-    public function getFotoMasukUrlAttribute(): ?string
+    protected function getFotoMasukUrlAttribute(): ?string
     {
         return $this->buildFotoUrl($this->foto_masuk);
     }
 
-    public function getFotoPulangUrlAttribute(): ?string
+    protected function getFotoPulangUrlAttribute(): ?string
     {
         return $this->buildFotoUrl($this->foto_pulang);
     }
 
-    public function getStatusLabelAttribute(): string
+    protected function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
             'tepat_waktu' => 'Tepat Waktu',
             'terlambat'   => 'Terlambat',
-            default       => '-',
+            default       => 'Belum Absen',
         };
     }
 
-    // ===========================================================
-    // RELASI
-    // ===========================================================
+    // --- HELPER LOGIC ---
+
+    /**
+     * Build full URL for photos.
+     * Menggunakan asset() untuk menghindari error Intelephense 'Undefined method url'.
+     */
+    private function buildFotoUrl(?string $path): ?string
+    {
+        if (!$path || str_contains($path, 'temp-absen/')) {
+            return null;
+        }
+
+        // Pastikan path foto benar-benar mengarah ke folder storage/public
+        return asset('storage/' . $path);
+    }
+
+    // --- RELATIONS ---
 
     public function sales(): BelongsTo
     {
@@ -83,22 +93,19 @@ class Presensi extends Model
 
     public function kunjungan(): HasMany
     {
-        return $this->hasMany(KunjunganToko::class, 'sales_id', 'sales_id');
+        return $this->hasMany(KunjunganToko::class, 'sales_id', 'sales_id')
+            ->whereColumn('tanggal', 'presensis.tanggal');
     }
 
-    // ===========================================================
-    // SCOPES
-    // ===========================================================
+    // --- SCOPES ---
 
     public function scopeHariIni($query)
     {
-        return $query->whereDate('tanggal', now('Asia/Jakarta'));
+        return $query->whereDate('tanggal', now('Asia/Jakarta')->toDateString());
     }
 
     public function scopeBySales($query, int $salesId)
     {
         return $query->where('sales_id', $salesId);
     }
-
-    // booted() dihapus — pakai PresensiObserver
 }

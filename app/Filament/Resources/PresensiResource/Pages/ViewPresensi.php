@@ -9,7 +9,6 @@ use Filament\Infolists\Infolist;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ImageEntry;
-use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\Grid;
 
 class ViewPresensi extends ViewRecord
@@ -30,14 +29,9 @@ class ViewPresensi extends ViewRecord
                 Section::make('Informasi Sales')
                     ->schema([
                         Grid::make(3)->schema([
-                            TextEntry::make('sales.nama')
-                                ->label('Nama Sales')
-                                ->weight('bold'),
-                            TextEntry::make('sales.area')
-                                ->label('Area'),
-                            TextEntry::make('tanggal')
-                                ->label('Tanggal')
-                                ->date('d M Y'),
+                            TextEntry::make('sales.nama')->label('Nama Sales')->weight('bold'),
+                            TextEntry::make('sales.area')->label('Area'),
+                            TextEntry::make('tanggal')->label('Tanggal')->date('d M Y'),
                         ]),
                     ]),
 
@@ -51,89 +45,65 @@ class ViewPresensi extends ViewRecord
                                     'tepat_waktu' => 'success',
                                     'terlambat'   => 'danger',
                                     default       => 'gray',
-                                })
-                                ->formatStateUsing(fn ($state) => $state === 'tepat_waktu'
-                                    ? 'Tepat Waktu' : 'Terlambat'),
-
-                            TextEntry::make('jam_masuk')
-                                ->label('Jam Masuk')
-                                ->time('H:i'),
-
-                            TextEntry::make('jam_pulang')
-                                ->label('Jam Pulang')
-                                ->time('H:i')
-                                ->placeholder('Belum Absen Pulang'),
+                                }),
+                            TextEntry::make('jam_masuk')->label('Jam Masuk')->time('H:i'),
+                            TextEntry::make('jam_pulang')->label('Jam Pulang')->time('H:i')->placeholder('Belum Pulang'),
                         ]),
-
-                        Grid::make(3)->schema([
-                            TextEntry::make('jam_perangkat_masuk')
-                                ->label('Jam HP (Masuk)')
-                                ->time('H:i')
-                                ->placeholder('-'),
-
+                        
+                        // --- FIX 1: LOKASI ---
+                        // Langsung ambil nilainya ($state) karena koordinat lo udah gabung jadi satu
+                        Grid::make(2)->schema([
                             TextEntry::make('location_masuk')
                                 ->label('Lokasi Masuk')
-                                ->placeholder('-')
-                                ->copyable()
-                                ->url(fn ($record) => $record->location_masuk
-                                    ? "https://www.google.com/maps/search/?api=1&query={$record->location_masuk}"
-                                    : null)
-                                ->openUrlInNewTab(),
+                                ->icon('heroicon-m-map-pin')
+                                ->iconColor('danger')
+                                ->color('primary') 
+                                ->weight('bold')
+                                ->url(fn ($state) => $state ? "https://maps.google.com/?q={$state}" : null)
+                                ->openUrlInNewTab()
+                                ->placeholder('Lokasi tidak tersedia'),
 
                             TextEntry::make('location_pulang')
                                 ->label('Lokasi Pulang')
-                                ->placeholder('-')
-                                ->copyable()
-                                ->url(fn ($record) => $record->location_pulang
-                                    ? "https://www.google.com/maps/search/?api=1&query={$record->location_pulang}"
-                                    : null)
-                                ->openUrlInNewTab(),
+                                ->icon('heroicon-m-map-pin')
+                                ->iconColor('danger')
+                                ->color('primary')
+                                ->weight('bold')
+                                ->url(fn ($state) => $state ? "https://maps.google.com/?q={$state}" : null)
+                                ->openUrlInNewTab()
+                                ->placeholder('Belum absen pulang'),
                         ]),
-
-                        IconEntry::make('is_suspicious')
-                            ->label('Status GPS')
-                            ->boolean()
-                            ->trueIcon('heroicon-o-exclamation-triangle')
-                            ->falseIcon('heroicon-o-check-circle')
-                            ->trueColor('danger')
-                            ->falseColor('success'),
                     ]),
 
-                // ─── SECTION FOTO ─────────────────────────────────────────────
+                // --- FIX 2: BUKTI FOTO ---
+                // Pake Javascript murni 'onclick' di gambar. Mustahil meleset atau timeout!
                 Section::make('Bukti Foto')
-                    ->description('Klik foto untuk membuka ukuran penuh di tab baru')
                     ->schema([
                         Grid::make(2)->schema([
-
-                            // ✅ FIX 1: Pakai getStateUsing() → accessor foto_masuk_url
-                            // Accessor sudah handle: temp-absen/ → null, storage path → full URL
-                            ImageEntry::make('foto_masuk_url')
+                            
+                            ImageEntry::make('foto_masuk')
                                 ->label('Foto Masuk')
-                                ->height(220)
-                                ->extraImgAttributes([
-                                    'class' => 'rounded-xl object-cover w-full',
-                                    'style' => 'cursor:zoom-in',
-                                ])
-                                // ✅ FIX 2: Klik foto → buka URL langsung di tab baru
-                                // (ImageEntry->action() tidak stabil di Filament v3)
-                                ->url(fn ($record) => $record->foto_masuk_url)
-                                ->openUrlInNewTab()
-                                ->placeholder('—'),
+                                ->disk('public')
+                                ->height(400)
+                                ->extraImgAttributes(fn ($state) => [
+                                    'onclick' => $state ? "window.open('" . asset('storage/' . $state) . "', '_blank')" : null,
+                                    'style' => 'cursor: zoom-in;',
+                                    'class' => 'rounded-xl object-contain bg-gray-100 shadow-sm transition hover:opacity-80',
+                                ]),
 
-                            ImageEntry::make('foto_pulang_url')
+                            ImageEntry::make('foto_pulang')
                                 ->label('Foto Pulang')
-                                ->height(220)
-                                ->extraImgAttributes([
-                                    'class' => 'rounded-xl object-cover w-full',
-                                    'style' => 'cursor:zoom-in',
+                                ->disk('public')
+                                ->height(400)
+                                ->extraImgAttributes(fn ($state) => [
+                                    'onclick' => $state ? "window.open('" . asset('storage/' . $state) . "', '_blank')" : null,
+                                    'style' => 'cursor: zoom-in;',
+                                    'class' => 'rounded-xl object-contain bg-gray-100 shadow-sm transition hover:opacity-80',
                                 ])
-                                ->url(fn ($record) => $record->foto_pulang_url)
-                                ->openUrlInNewTab()
                                 ->placeholder('Belum ada foto pulang'),
                         ]),
                     ])
-                    // ✅ FIX 3: Cek accessor _url bukan kolom mentah
-                    ->visible(fn ($record) => $record->foto_masuk_url || $record->foto_pulang_url),
+                    ->visible(fn ($record) => $record && ($record->foto_masuk || $record->foto_pulang)),
             ]);
     }
 }
