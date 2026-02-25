@@ -48,7 +48,6 @@ class KunjunganTokoResource extends Resource
     {
         return $table
             ->modifyQueryUsing(fn($query) => $query->with('sales'))
-            // Sortir default tetap dari yang terbaru
             ->defaultSort('created_at', 'desc')
             ->defaultPaginationPageOption(15)
             
@@ -83,14 +82,12 @@ class KunjunganTokoResource extends Resource
                     ->trueColor('danger')
                     ->falseColor('success')
                     ->alignCenter(),
-
-                // BAGIAN JAM: sorting ditiadakan agar tombol panah hilang
                 TextColumn::make('created_at')
                     ->label('Jam Kunjungan')
                     ->dateTime('H:i') 
                     ->description(fn (KunjunganToko $record): string => $record->created_at->format('d M Y'))
                     ->alignEnd()
-                    ->sortable(false), // Menghilangkan tombol sortir agar tampilan fixed
+                    ->sortable(false), 
             ])
             ->filters([
                 TernaryFilter::make('is_suspicious')->label('Status Kecurangan'),
