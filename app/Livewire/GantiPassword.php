@@ -2,44 +2,97 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
-use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
+use Livewire\Component;
 
-class GantiPassword extends Component  // ✅ class name sesuai filename
+class GantiPassword extends Component implements HasForms
 {
-    public $current_password;
-    public $new_password;
-    public $new_password_confirmation;
+    use InteractsWithForms;
 
-    public function updatePassword()
+    public ?array $data = [];
+    
+    // ✅ Variabel untuk menampung password sementara agar bisa ditampilkan
+    public ?string $showPasswordTemporarily = null;
+
+    // Syarat 1: Izin Tampil
+    public static function canView(): bool
     {
-        $this->validate([
-            'current_password' => ['required', 'current_password'],
-            'new_password'     => ['required', 'min:8', 'confirmed'],
-        ]);
+        return true; 
+    }
+
+    // Syarat 2: Urutan Tampil
+    public static function getSort(): int
+    {
+        return 10;
+    }
+
+    public function mount(): void
+    {
+        $this->form->fill();
+    }
+
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                TextInput::make('current_password')
+                    ->label('Kata Sandi Saat Ini')
+                    ->password()
+                    ->revealable() 
+                    ->required()
+                    ->currentPassword(),
+
+                TextInput::make('new_password')
+                    ->label('Kata Sandi Baru')
+                    ->password()
+                    ->revealable() 
+                    ->required()
+                    ->rule(Password::default()->mixedCase()->numbers()->uncompromised())
+                    ->same('new_password_confirmation'),
+
+                TextInput::make('new_password_confirmation')
+                    ->label('Konfirmasi Kata Sandi Baru')
+                    ->password()
+                    ->revealable() 
+                    ->required()
+                    ->dehydrated(false),
+            ])
+            ->statePath('data');
+    }
+
+    // ✅ NAMA FUNGSI SUDAH DIPERBAIKI MENJADI 'submit'
+    public function submit(): void
+    {
+        $state = $this->form->getState();
 
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        if ($user) {
-            $user->update([
-                'password' => Hash::make($this->new_password),
-            ]);
+        // Simpan password teks asli ke variabel ini sebelum di-hash
+        $this->showPasswordTemporarily = $state['new_password'];
 
-            $this->reset(['current_password', 'new_password', 'new_password_confirmation']);
+        $user->update([
+            'password' => Hash::make($state['new_password']),
+        ]);
 
-            Notification::make()
-                ->title('Password Berhasil Diperbarui')
-                ->success()
-                ->send();
-        }
+        // Kosongkan form setelah berhasil disimpan
+        $this->form->fill();
+
+        Notification::make()
+            ->title('Password Berhasil Diperbarui')
+            ->success()
+            ->send();
     }
 
     public function render()
     {
-        return view('livewire.ganti-password');
+        return view('vendor.filament-breezy.livewire.update-password');
     }
 }

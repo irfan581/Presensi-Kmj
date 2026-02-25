@@ -4,7 +4,6 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PresensiResource\Pages;
 use App\Models\Presensi;
-use App\Models\KunjunganToko;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
@@ -12,13 +11,10 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Contracts\HasTable;
 use Filament\Tables;
 use Filament\Forms\Components\DatePicker;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Builder;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 
 class PresensiResource extends Resource
@@ -35,7 +31,6 @@ class PresensiResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        // ✅ OPT: Cache 60s — badge query setiap sidebar render = boros
         $count = Cache::remember('presensi_on_duty_count', 60, function () {
             return Presensi::whereDate('tanggal', now())
                 ->whereNotNull('jam_masuk')
@@ -57,7 +52,6 @@ class PresensiResource extends Resource
     {
         return $table
             ->modifyQueryUsing(fn($query) => $query
-                // ✅ OPT: select kolom spesifik — tidak load semua
                 ->select([
                     'id', 'sales_id', 'tanggal', 'status',
                     'jam_masuk', 'jam_perangkat_masuk', 'jam_pulang',
@@ -105,8 +99,6 @@ class PresensiResource extends Resource
                     )
                     ->alignCenter(),
 
-                // ✅ OPT: Gunakan foto_masuk (path) bukan foto_masuk_url (accessor)
-                // ImageColumn handle URL sendiri via disk — tidak perlu accessor
                 ImageColumn::make('foto_masuk')
                     ->label('Foto')
                     ->disk('public')
@@ -157,20 +149,12 @@ class PresensiResource extends Resource
                         'terlambat'   => 'Terlambat',
                     ]),
             ])
-            ->headerActions([
-                Tables\Actions\Action::make('export_combined_pdf')
-                    ->label('Download Laporan')
-                    ->color('success')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->action(fn(HasTable $livewire) => self::_generatePdf($livewire)),
-            ])
+            // headerActions SUDAH DIHAPUS (Tombol Download Hilang)
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ]);
     }
-
-    // ─── PAGES ────────────────────────────────────────────────
 
     public static function getPages(): array
     {
@@ -178,109 +162,5 @@ class PresensiResource extends Resource
             'index' => Pages\ListPresensis::route('/'),
             'view'  => Pages\ViewPresensi::route('/{record}'),
         ];
-    }
-
-    // ─── PDF GENERATOR ────────────────────────────────────────
-
-    private static function _generatePdf(HasTable $livewire): mixed
-    {
-        // ✅ OPT: select kolom yang dibutuhkan saja di query PDF
-        $presensi = $livewire->getFilteredTableQuery()
-            ->select([
-                'id', 'sales_id', 'tanggal', 'status',
-                'jam_masuk', 'jam_pulang', 'jam_perangkat_masuk',
-                'location_masuk', 'location_pulang',
-                'keterangan', 'is_suspicious',
-            ])
-            ->with('sales:id,nama')
-            ->get();
-
-        if ($presensi->isEmpty()) {
-            Notification::make()->warning()->title('Data tidak ditemukan')->send();
-            return null;
-        }
-
-        $filterData = $livewire->tableFilters;
-        $tglDari    = $filterData['tanggal']['dari']   ?? $presensi->min('tanggal');
-        $tglSampai  = $filterData['tanggal']['sampai'] ?? $presensi->max('tanggal');
-        $range      = Carbon::parse($tglDari)->format('d/m/Y')
-                    . ' - '
-                    . Carbon::parse($tglSampai)->format('d/m/Y');
-
-        $salesIds = $presensi->pluck('sales_id')->unique();
-        $kunjungan = KunjunganToko::whereIn('sales_id', $salesIds)
-            ->whereBetween('created_at', [
-                Carbon::parse($tglDari)->startOfDay(),
-                Carbon::parse($tglSampai)->endOfDay(),
-            ])
-            ->select(['id', 'sales_id', 'nama_toko', 'location', 'keterangan', 'is_suspicious', 'suspicious_reason', 'created_at'])
-            ->with('sales:id,nama') 
-            ->get();
-
-        $combined = collect();
-
-        foreach ($presensi as $p) {
-            $tglBersih = Carbon::parse($p->tanggal)->toDateString();
-            $isTimeSuspicious = ($p->jam_masuk && $p->jam_perangkat_masuk)
-                && Carbon::parse($p->jam_masuk)->diffInMinutes(Carbon::parse($p->jam_perangkat_masuk)) > 10;
-
-            $combined->push([
-                'sales_name' => $p->sales->nama,
-                'waktu'      => $tglBersih . ' ' . $p->jam_masuk,
-                'type'       => 'Absen',
-                'detail'     => 'MASUK ' . ($p->status === 'terlambat' ? '(Telat)' : '(Tepat Waktu)'),
-                'location'   => $p->location_masuk,
-                'keterangan' => $p->keterangan,
-                'suspicious' => $p->is_suspicious || $isTimeSuspicious,
-                'reason'     => $p->is_suspicious ? 'Fake GPS' : ($isTimeSuspicious ? 'Jam HP Tidak Sinkron' : ''),
-            ]);
-
-            if ($p->jam_pulang) {
-                $combined->push([
-                    'sales_name' => $p->sales->nama,
-                    'waktu'      => $tglBersih . ' ' . $p->jam_pulang,
-                    'type'       => 'Absen',
-                    'detail'     => 'PULANG',
-                    'location'   => $p->location_pulang,
-                    'keterangan' => 'Selesai tugas',
-                    'suspicious' => false,
-                    'reason'     => '',
-                ]);
-            }
-        }
-
-        foreach ($kunjungan as $k) {
-            $combined->push([
-                'sales_name' => $k->sales->nama, // ✅ Sudah eager loaded — tidak N+1
-                'waktu'      => $k->created_at->format('Y-m-d H:i:s'),
-                'type'       => 'Toko',
-                'detail'     => 'Kunjungan: ' . ($k->nama_toko ?? 'Toko'),
-                'location'   => $k->location,
-                'keterangan' => $k->keterangan,
-                'suspicious' => $k->is_suspicious,
-                'reason'     => $k->suspicious_reason,
-            ]);
-        }
-
-        $sorted   = $combined->sortBy('waktu');
-        $selected = $livewire->tableFilters['sales']['values'] ?? [];
-        $isSingle = count($selected) === 1;
-        $fname    = $isSingle
-            ? 'Laporan-' . str_replace(' ', '-', $presensi->first()->sales->nama)
-            : 'Laporan-Tim';
-
-        return response()->streamDownload(
-            function () use ($sorted, $presensi, $isSingle, $range) {
-                echo Pdf::loadView('pdf.recap-presensi', [
-                    'activities' => $sorted,
-                    'sales'      => $isSingle ? $presensi->first()->sales : null,
-                    'date_range' => $range,
-                ])
-                ->setPaper('a4', 'landscape')
-                ->setOption(['isRemoteEnabled' => true])
-                ->output();
-            },
-            $fname . '-' . date('YmdHi') . '.pdf'
-        );
     }
 }

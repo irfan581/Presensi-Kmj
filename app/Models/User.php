@@ -9,24 +9,29 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Facades\Storage;
 use Jeffgreco13\FilamentBreezy\Traits\TwoFactorAuthenticatable;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class User extends Authenticatable implements FilamentUser, HasAvatar
 {
-    use HasFactory, Notifiable, TwoFactorAuthenticatable;
+    use HasFactory, Notifiable, TwoFactorAuthenticatable, LogsActivity;
 
     protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'role',            
-        'is_admin',
-        'allowed_ip',
+        'name', 
+        'email', 
+        'password', 
+        'role',              
+        'is_admin', 
+        'allowed_ip', 
         'session_version',
+        'avatar_url',
+        'permissions', // ✅ Tambahkan ini Bang
     ];
 
     protected $hidden = [
-        'password',
+        'password', 
         'remember_token',
     ];
 
@@ -38,31 +43,30 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'is_admin' => 'boolean',
             'session_version' => 'integer',
             'role' => 'string',
+            'permissions' => 'array', // ✅ Paksa jadi Array biar bisa dicentang-centang
         ];
     }
 
-    /**
-     * KUNCI LOGIN FILAMENT
-     * Cek apakah user punya role 'admin' atau is_admin bernilai true.
-     */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return (new LogOptions())
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
-        // Pastikan role di DB tulisannya 'admin' (huruf kecil semua)
-        return ($this->role === 'admin' || $this->is_admin === true);
+        $allowedRoles = ['owner', 'boss', 'admin'];
+        return in_array($this->role, $allowedRoles) || $this->is_admin === true;
     }
 
-    /**
-     * AVATAR SETTINGS
-     */
-    public function getFilamentAvatarUrl(): ?string
-    {
-        return null;
+    public function getFilamentAvatarUrl(): ?string 
+    { 
+        return $this->avatar_url ? Storage::url($this->avatar_url) : null; 
     }
 
-    /**
-     * PASSWORD RULES
-     */
-    public static function passwordRules(): Password
+    public static function passwordRules(): Password 
     {
         return Password::min(12)
             ->letters()
@@ -72,18 +76,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             ->uncompromised();
     }
 
-    /**
-     * HELPER CHECK ADMIN
-     */
-    public function isAdmin(): bool
-    {
-        return $this->role === 'admin' || (bool) $this->is_admin;
-    }
-
-    /**
-     * SESSION SECURITY
-     */
-    public function bumpSessionVersion(): void
+    public function bumpSessionVersion(): void 
     {
         $this->increment('session_version');
     }

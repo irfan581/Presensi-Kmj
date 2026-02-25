@@ -2,8 +2,12 @@
 
 return [
     /*
-    | Jam batas toleransi masuk (format 24 jam).
-    | Jika absen masuk >= jam ini, status jadi 'terlambat'.
+    |--------------------------------------------------------------------------
+    | Batas Jam Masuk
+    |--------------------------------------------------------------------------
+    | Format: HH:mm
+    | Sales yang masuk setelah jam ini akan dianggap terlambat.
+    | Nilai diambil dari .env → ABSENSI_BATAS_JAM
     */
-    'batas_jam_terlambat' => env('ABSENSI_BATAS_JAM', 8),
+    'batas_jam' => env('ABSENSI_BATAS_JAM', '08:00'),
 ];

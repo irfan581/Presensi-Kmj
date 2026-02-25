@@ -11,6 +11,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\IconEntry;
 use Filament\Infolists\Components\Grid;
+use Filament\Infolists\Components\Group;
 
 class ViewKunjunganToko extends ViewRecord
 {
@@ -19,7 +20,6 @@ class ViewKunjunganToko extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            // Tombol biru "Buka Lokasi" udah gue hapus dari sini, Bang.
             Actions\DeleteAction::make(),
         ];
     }
@@ -28,66 +28,91 @@ class ViewKunjunganToko extends ViewRecord
     {
         return $infolist
             ->schema([
+                // --- SECTION ATAS: RINGKASAN UTAMA ---
                 Section::make('Informasi Kunjungan')
+                    ->icon('heroicon-o-information-circle')
                     ->schema([
                         Grid::make(3)->schema([
                             TextEntry::make('sales.nama')
                                 ->label('Nama Sales')
-                                ->weight('bold'),
+                                ->weight('bold')
+                                ->color('primary')
+                                ->icon('heroicon-m-user'),
+                            
                             TextEntry::make('nama_toko')
-                                ->label('Nama Toko'),
+                                ->label('Nama Toko')
+                                ->weight('bold')
+                                ->icon('heroicon-m-shopping-bag'),
+                            
                             TextEntry::make('created_at')
                                 ->label('Waktu Kunjungan')
-                                ->dateTime('d M Y, H:i'),
-                        ]),
-
-                        Grid::make(2)->schema([
-                            // KLIK TEKS INI UNTUK BUKA MAPS
-                            TextEntry::make('location')
-                                ->label('Koordinat GPS')
-                                ->icon('heroicon-m-map-pin')
-                                ->iconColor('danger')
-                                ->color('primary')
-                                ->weight('bold')
-                                ->url(fn ($state) => $state ? "https://www.google.com/maps/search/?api=1&query={$state}" : null)
-                                ->openUrlInNewTab()
-                                ->placeholder('-'),
-
-                            TextEntry::make('keterangan')
-                                ->label('Keterangan')
-                                ->placeholder('-'),
-                        ]),
-
-                        Grid::make(2)->schema([
-                            IconEntry::make('is_suspicious')
-                                ->label('Status GPS')
-                                ->boolean()
-                                ->trueIcon('heroicon-o-exclamation-triangle')
-                                ->falseIcon('heroicon-o-check-circle')
-                                ->trueColor('danger')
-                                ->falseColor('success'),
-
-                            TextEntry::make('suspicious_reason')
-                                ->label('Alasan Indikasi')
-                                ->placeholder('-')
-                                ->visible(fn ($record) => $record->is_suspicious),
+                                ->dateTime('d M Y, H:i')
+                                ->icon('heroicon-m-clock'),
                         ]),
                     ]),
 
-                Section::make('Bukti Foto Kunjungan')
-                    ->schema([
-                        // KLIK FOTO UNTUK ZOOM
-                        ImageEntry::make('foto_kunjungan')
-                            ->disk('public')
-                            ->visibility('public')
-                            ->height(400)
-                            ->extraImgAttributes(fn ($state) => [
-                                'onclick' => $state ? "window.open('" . asset('storage/' . $state) . "', '_blank')" : null,
-                                'style' => 'cursor: zoom-in;',
-                                'class' => 'rounded-xl object-contain bg-gray-100 shadow-sm transition hover:opacity-80',
+                // --- GRID TENGAH: LOKASI VS FOTO ---
+                Grid::make(3)->schema([
+                    
+                    // Kolom Kiri: Detail & Lokasi (Span 2)
+                    Group::make([
+                        Section::make('Detail & Validasi Lokasi')
+                            ->schema([
+                                TextEntry::make('keterangan')
+                                    ->label('Hasil Kunjungan / Keterangan')
+                                    ->placeholder('Tidak ada catatan tambahan.')
+                                    ->prose(),
+
+                                Grid::make(2)->schema([
+                                    TextEntry::make('location')
+                                        ->label('Koordinat GPS')
+                                        ->icon('heroicon-m-map-pin')
+                                        ->iconColor('danger')
+                                        ->color('primary')
+                                        ->weight('bold')
+                                        // Format URL yang lebih clean untuk Google Maps
+                                        ->url(fn ($state) => $state ? "https://www.google.com/maps/search/?api=1&query={$state}" : null)
+                                        ->openUrlInNewTab()
+                                        ->helperText('Klik koordinat di atas untuk membuka Google Maps'),
+
+                                    Group::make([
+                                        IconEntry::make('is_suspicious')
+                                            ->label('Status Keamanan GPS')
+                                            ->boolean()
+                                            ->trueIcon('heroicon-o-exclamation-triangle')
+                                            ->falseIcon('heroicon-o-check-circle')
+                                            ->trueColor('danger')
+                                            ->falseColor('success'),
+
+                                        TextEntry::make('suspicious_reason')
+                                            ->label('Alasan Indikasi Kecurangan')
+                                            ->color('danger')
+                                            ->weight('medium')
+                                            ->visible(fn ($record) => $record->is_suspicious),
+                                    ]),
+                                ]),
                             ]),
-                    ])
-                    ->visible(fn ($record) => !empty($record->foto_kunjungan)),
+                    ])->columnSpan(2),
+
+                    // Kolom Kanan: Bukti Foto (Span 1)
+                    Group::make([
+                        Section::make('Bukti Foto')
+                            ->schema([
+                                ImageEntry::make('foto_kunjungan')
+                                    ->hiddenLabel()
+                                    ->disk('public')
+                                    ->visibility('public')
+                                    ->height(300)
+                                    ->extraImgAttributes([
+                                        'class' => 'rounded-xl w-full object-cover shadow-lg border border-gray-200',
+                                        'style' => 'cursor: zoom-in;',
+                                        // Trigger buka gambar di tab baru saat diklik lewat atribut HTML
+                                        'onclick' => "window.open(this.src, '_blank')"
+                                    ])
+                                    ->placeholder('Foto tidak tersedia'),
+                            ]),
+                    ])->columnSpan(1),
+                ]),
             ]);
     }
 }

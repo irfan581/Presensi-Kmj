@@ -6,32 +6,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\Traits\LogsActivity; // ✅ Tambahan
+use Spatie\Activitylog\LogOptions;          // ✅ Tambahan
 
 class Presensi extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity; // ✅ Aktifkan Log
 
     protected $table = 'presensis';
 
     protected $fillable = [
-        'sales_id', 
-        'tanggal',
-        'jam_masuk', 
-        'jam_perangkat_masuk', 
-        'status',
-        'foto_masuk', 
-        'location_masuk', 
-        'lat_masuk', 
-        'lng_masuk',
-        'jam_pulang', 
-        'jam_perangkat_pulang',
-        'foto_pulang', 
-        'location_pulang', 
-        'lat_pulang', 
-        'lng_pulang',
-        'keterangan', 
-        'is_suspicious', 
-        'suspicious_reason',
+        'sales_id', 'tanggal', 'jam_masuk', 'jam_perangkat_masuk', 'status',
+        'foto_masuk', 'location_masuk', 'lat_masuk', 'lng_masuk',
+        'jam_pulang', 'jam_perangkat_pulang', 'foto_pulang', 'location_pulang', 
+        'lat_pulang', 'lng_pulang', 'keterangan', 'is_suspicious', 'suspicious_reason',
     ];
 
     protected $casts = [
@@ -47,8 +35,16 @@ class Presensi extends Model
         'status_label',
     ];
 
-    // --- ACCESSORS ---
+    // --- ACTIVITY LOG SETTINGS ---
+    public function getActivitylogOptions(): LogOptions
+    {
+        return (new LogOptions())
+            ->logFillable()
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 
+    // --- ACCESSORS ---
     protected function getFotoMasukUrlAttribute(): ?string
     {
         return $this->buildFotoUrl($this->foto_masuk);
@@ -69,23 +65,15 @@ class Presensi extends Model
     }
 
     // --- HELPER LOGIC ---
-
-    /**
-     * Build full URL for photos.
-     * Menggunakan asset() untuk menghindari error Intelephense 'Undefined method url'.
-     */
     private function buildFotoUrl(?string $path): ?string
     {
         if (!$path || str_contains($path, 'temp-absen/')) {
             return null;
         }
-
-        // Pastikan path foto benar-benar mengarah ke folder storage/public
         return asset('storage/' . $path);
     }
 
     // --- RELATIONS ---
-
     public function sales(): BelongsTo
     {
         return $this->belongsTo(Sales::class, 'sales_id');
@@ -98,7 +86,6 @@ class Presensi extends Model
     }
 
     // --- SCOPES ---
-
     public function scopeHariIni($query)
     {
         return $query->whereDate('tanggal', now('Asia/Jakarta')->toDateString());

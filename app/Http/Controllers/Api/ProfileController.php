@@ -8,6 +8,7 @@ use App\Services\ProfileService;
 use App\Http\Resources\Api\SalesResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class ProfileController extends Controller
 {
@@ -45,6 +46,13 @@ class ProfileController extends Controller
                 'data'    => new SalesResource($updatedUser),
             ]);
         } catch (\Exception $e) {
+            // Log error untuk debugging
+            Log::error('Update profil error', [
+                'user_id' => $request->user()->id,
+                'error'   => $e->getMessage(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal update profil: ' . $e->getMessage(),
@@ -75,20 +83,17 @@ class ProfileController extends Controller
     }
 
     // ─── RESET PASSWORD ───────────────────────────────────────
-    // Reset ke password default (misal NIK sales) — hanya admin atau sales sendiri
 
     public function resetPassword(Request $request): JsonResponse
     {
         try {
             $user = $request->user();
-
-            // Reset ke NIK sebagai password default
             $passwordBaru = $this->profileService->resetPassword($user);
 
             return response()->json([
                 'success'       => true,
                 'message'       => 'Password berhasil direset',
-                'password_baru' => $passwordBaru, // Tampilkan sekali ke user
+                'password_baru' => $passwordBaru,
             ]);
         } catch (\Exception $e) {
             return response()->json([

@@ -1,9 +1,11 @@
-<x-filament::page>
-    <div class="space-y-6 divide-y divide-gray-900/10 dark:divide-white/10">
+<x-filament-panels::page>
+    {{-- Menggunakan gap-y-8 agar jarak antar card (Profil, Password, 2FA) lebih rapi dan lega --}}
+    <div class="flex flex-col gap-y-8">
         @foreach ($this->getRegisteredMyProfileComponents() as $component)
-            @unless(is_null($component))
-                @livewire($component)
-            @endunless
+        @if($component)
+        {{-- ✅ WAJIB ADA key($component) AGAR LIVEWIRE TIDAK BINGUNG/ERROR --}}
+        @livewire($component, key($component))
+        @endif
         @endforeach
     </div>
-</x-filament::page>
+</x-filament-panels::page>

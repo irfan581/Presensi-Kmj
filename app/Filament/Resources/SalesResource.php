@@ -6,20 +6,21 @@ use App\Filament\Resources\SalesResource\Pages;
 use App\Models\Sales;
 use App\Models\Presensi;
 use App\Models\KunjunganToko;
-use App\Models\NotifikasiSales; 
+use App\Models\Izin;
+use App\Models\NotifikasiSales;
+use App\Services\FcmService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Hash;
-use Filament\Forms\Components\{TextInput, Toggle, FileUpload, Textarea, Section, Grid, Group, DatePicker};
+use Filament\Forms\Components\{TextInput, Toggle, FileUpload, Textarea, Section, Grid, Group, DatePicker, CheckboxList};
 use Filament\Tables\Columns\{TextColumn, ImageColumn, IconColumn};
 use Filament\Tables\Actions\{Action, ActionGroup};
-use Filament\Notifications\Notification; 
+use Filament\Notifications\Notification;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Auth; // Penting untuk Auth::user()
 
 class SalesResource extends Resource
 {
@@ -27,8 +28,6 @@ class SalesResource extends Resource
     protected static ?string $navigationIcon  = 'heroicon-o-users';
     protected static ?string $navigationLabel = 'Data Karyawan';
     protected static ?int    $navigationSort  = 1;
-
-    // ─── FORM ─────────────────────────────────────────────────
 
     public static function form(Form $form): Form
     {
@@ -103,8 +102,6 @@ class SalesResource extends Resource
             ])->columns(3);
     }
 
-    // ─── TABLE ────────────────────────────────────────────────
-
     public static function table(Table $table): Table
     {
         return $table
@@ -134,6 +131,7 @@ class SalesResource extends Resource
                     ->color('success'),
 
                 TextColumn::make('area')
+                    ->label('Area Tugas')
                     ->badge()
                     ->color('info')
                     ->searchable(),
@@ -157,27 +155,28 @@ class SalesResource extends Resource
             ->actions([
                 ActionGroup::make([
                     Tables\Actions\EditAction::make(),
-                    // ─── ACTION: KIRIM NOTIFIKASI (FIXED) ───
+
+                    // ─── ACTION: KIRIM NOTIFIKASI ───────────────────────────
                     Action::make('kirimNotifikasi')
-                        ->label('Kirim Notifikasi')
+                        ->label('Kirim Pesan')
                         ->icon('heroicon-o-paper-airplane')
                         ->color('warning')
                         ->form([
                             TextInput::make('title')
                                 ->label('Judul Notifikasi')
-                                ->placeholder('Contoh: Pengumuman Penting')
-                                ->required(),
+                                ->required()
+                                ->maxLength(100),
                             Textarea::make('message')
                                 ->label('Isi Pesan')
-                                ->placeholder('Tulis pesan Anda di sini...')
                                 ->rows(3)
-                                ->required(),
+                                ->required()
+                                ->maxLength(500),
                         ])
                         ->action(function (Sales $record, array $data) {
-                            // PAKSA REFRESH DATA DARI DATABASE AGAR TOKEN TERBARU TERBACA ✅
+                            // ✅ FIX: Refresh dulu agar fcm_token terbaru
                             $record->refresh();
 
-                            // 1. Simpan ke tabel riwayat notifikasi (Database)
+                            // 1. Simpan ke database notifikasi
                             NotifikasiSales::create([
                                 'sales_id' => $record->id,
                                 'title'    => $data['title'],
@@ -185,35 +184,43 @@ class SalesResource extends Resource
                                 'is_read'  => false,
                             ]);
 
-                            // 2. KIRIM REAL-TIME VIA FCM ✅
-                            if ($record->fcm_token) {
-                                try {
-                                    \App\Services\FcmService::sendNotification(
-                                        $record->fcm_token,
-                                        $data['title'],
-                                        $data['message'],
-                                        ['type' => 'manual_admin'] // Data tambahan untuk Flutter
-                                    );
-                                    
-                                    $statusNotif = "Notifikasi berhasil terkirim ke HP {$record->nama}.";
-                                    $statusIcon = 'success';
-                                } catch (\Exception $e) {
-                                    $statusNotif = "Data disimpan ke riwayat, tapi FCM gagal: " . $e->getMessage();
-                                    $statusIcon = 'danger';
-                                }
-                            } else {
-                                $statusNotif = "Data disimpan ke riwayat, tapi gagal kirim ke HP karena Sales belum login/tidak ada token di sistem.";
-                                $statusIcon = 'warning';
+                            // 2. ✅ FIX: Langsung kirim FCM (tidak andalkan Observer)
+                            $token = $record->fcm_token;
+
+                            if (empty($token)) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Notifikasi disimpan, tapi FCM token belum terdaftar.')
+                                    ->body('Sales belum login atau token belum tersinkron.')
+                                    ->send();
+                                return;
                             }
 
-                            // 3. Notifikasi untuk Admin (Dashboard Web)
-                            Notification::make()
-                                ->title($statusNotif)
-                                ->status($statusIcon)
-                                ->send();
+                            $berhasil = FcmService::sendNotification(
+                                $token,
+                                $data['title'],
+                                $data['message'],
+                                [
+                                    'type'     => 'admin_notif',
+                                    'sales_id' => (string) $record->id,
+                                ]
+                            );
+
+                            if ($berhasil) {
+                                Notification::make()
+                                    ->success()
+                                    ->title('Notifikasi berhasil dikirim!')
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Notifikasi tersimpan, tapi pengiriman FCM gagal.')
+                                    ->body('Cek log Laravel untuk detail error.')
+                                    ->send();
+                            }
                         }),
 
-                    // ─── ACTION: REKAP PDF ───
+                    // ─── ACTION: REKAP PDF ──────────────────────────────────
                     Action::make('downloadReport')
                         ->label('Rekap Aktivitas (PDF)')
                         ->icon('heroicon-o-document-arrow-down')
@@ -229,76 +236,120 @@ class SalesResource extends Resource
                                     ->default(now())
                                     ->required(),
                             ]),
+                            CheckboxList::make('filter_tipe')
+                                ->label('Pilih Data yang Ingin Ditampilkan')
+                                ->options([
+                                    'absen' => 'Presensi (Masuk & Pulang)',
+                                    'toko'  => 'Kunjungan Toko',
+                                    'izin'  => 'Izin/Sakit (Approved)',
+                                ])
+                                ->default(['absen', 'toko', 'izin'])
+                                ->columns(3)
+                                ->required(),
                         ])
                         ->action(function (Sales $record, array $data) {
                             $dari   = Carbon::parse($data['dari'])->toDateString();
                             $sampai = Carbon::parse($data['sampai'])->toDateString();
+                            $tipeTerpilih = $data['filter_tipe'];
 
                             $combined = collect();
+                            $totalHadir = 0;
+                            $totalKunjungan = 0;
 
-                            Presensi::where('sales_id', $record->id)
-                                ->whereBetween('tanggal', [$dari, $sampai])
-                                ->orderBy('tanggal')
-                                ->each(function ($p) use ($combined) {
-                                    $tglBersih = Carbon::parse($p->tanggal)->toDateString();
+                            if (in_array('absen', $tipeTerpilih)) {
+                                $presensi = Presensi::where('sales_id', $record->id)
+                                    ->whereBetween('tanggal', [$dari, $sampai])
+                                    ->get();
+
+                                $totalHadir = $presensi->count();
+
+                                $presensi->each(function ($p) use ($combined) {
+                                    $tgl = Carbon::parse($p->tanggal)->toDateString();
                                     $combined->push([
-                                        'waktu'      => $tglBersih . ' ' . $p->jam_masuk,
+                                        'waktu'      => $tgl . ' ' . $p->jam_masuk,
                                         'type'       => 'Absen',
                                         'detail'     => 'MASUK ' . ($p->status === 'terlambat' ? '(Telat)' : '(On Time)'),
                                         'location'   => $p->location_masuk,
-                                        'keterangan' => $p->keterangan,
-                                        'suspicious' => $p->is_suspicious,
-                                        'sort_key'   => Carbon::parse($tglBersih . ' ' . $p->jam_masuk),
+                                        'keterangan' => $p->keterangan ?? '-',
+                                        'sort_key'   => Carbon::parse($tgl . ' ' . $p->jam_masuk),
                                     ]);
-
                                     if ($p->jam_pulang) {
                                         $combined->push([
-                                            'waktu'      => $tglBersih . ' ' . $p->jam_pulang,
+                                            'waktu'      => $tgl . ' ' . $p->jam_pulang,
                                             'type'       => 'Absen',
                                             'detail'     => 'PULANG',
                                             'location'   => $p->location_pulang,
-                                            'keterangan' => 'Tugas Selesai',
-                                            'suspicious' => false,
-                                            'sort_key'   => Carbon::parse($tglBersih . ' ' . $p->jam_pulang),
+                                            'keterangan' => 'Selesai Tugas',
+                                            'sort_key'   => Carbon::parse($tgl . ' ' . $p->jam_pulang),
                                         ]);
                                     }
                                 });
+                            }
 
-                            KunjunganToko::where('sales_id', $record->id)
-                                ->whereBetween('created_at', [Carbon::parse($dari)->startOfDay(), Carbon::parse($sampai)->endOfDay()])
-                                ->orderBy('created_at')
-                                ->each(function ($k) use ($combined) {
+                            if (in_array('toko', $tipeTerpilih)) {
+                                $kunjungan = KunjunganToko::where('sales_id', $record->id)
+                                    ->whereBetween('created_at', [
+                                        Carbon::parse($dari)->startOfDay(),
+                                        Carbon::parse($sampai)->endOfDay()
+                                    ])
+                                    ->get();
+
+                                $totalKunjungan = $kunjungan->count();
+
+                                $kunjungan->each(function ($k) use ($combined) {
                                     $combined->push([
                                         'waktu'      => $k->created_at->format('Y-m-d H:i:s'),
                                         'type'       => 'Toko',
-                                        'detail'     => 'Kunjungan: ' . $k->nama_toko,
+                                        'detail'     => 'Kunjungan: ' . ($k->nama_toko ?? 'Toko'),
                                         'location'   => $k->location,
-                                        'keterangan' => $k->keterangan,
-                                        'suspicious' => $k->is_suspicious,
+                                        'keterangan' => $k->keterangan ?? '-',
                                         'sort_key'   => $k->created_at,
                                     ]);
                                 });
+                            }
+
+                            if (in_array('izin', $tipeTerpilih)) {
+                                Izin::where('sales_id', $record->id)
+                                    ->where('status', 'approved')
+                                    ->whereBetween('tanggal', [$dari, $sampai])
+                                    ->get()
+                                    ->each(function ($i) use ($combined) {
+                                        $combined->push([
+                                            'waktu'      => Carbon::parse($i->tanggal)->format('Y-m-d'),
+                                            'type'       => 'Izin',
+                                            'detail'     => 'IZIN: ' . strtoupper($i->jenis_izin),
+                                            'location'   => '-',
+                                            'keterangan' => $i->keterangan,
+                                            'sort_key'   => Carbon::parse($i->tanggal)->startOfDay(),
+                                        ]);
+                                    });
+                            }
 
                             if ($combined->isEmpty()) {
-                                Notification::make()->warning()->title('Tidak ada data pada periode ini')->send();
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Data tidak ditemukan untuk kriteria ini')
+                                    ->send();
                                 return;
                             }
 
                             $activities = $combined->sortBy('sort_key');
 
                             return response()->streamDownload(
-                                function () use ($record, $activities, $dari, $sampai) {
+                                function () use ($record, $activities, $dari, $sampai, $totalHadir, $totalKunjungan) {
                                     echo Pdf::loadView('pdf.recap-presensi', [
-                                        'sales'      => $record,
-                                        'activities' => $activities,
-                                        'date_range' => Carbon::parse($dari)->format('d/m/Y') . ' - ' . Carbon::parse($sampai)->format('d/m/Y'),
+                                        'sales'           => $record,
+                                        'activities'      => $activities,
+                                        'total_hadir'     => $totalHadir,
+                                        'total_kunjungan' => $totalKunjungan,
+                                        'date_range'      => Carbon::parse($dari)->format('d/m/Y') . ' - ' . Carbon::parse($sampai)->format('d/m/Y'),
                                     ])->setPaper('a4', 'landscape')->output();
                                 },
-                                "Rekap_{$record->nama}_" . date('Ymd') . ".pdf"
+                                "Rekap_{$record->nama}_" . date('Ymd_Hi') . ".pdf"
                             );
                         }),
 
-                    // ─── ACTION: RESET DEVICE ───
+                    // ─── ACTION: RESET DEVICE ───────────────────────────────
                     Action::make('resetDevice')
                         ->label('Reset Device ID')
                         ->icon('heroicon-o-arrow-path')
@@ -306,7 +357,10 @@ class SalesResource extends Resource
                         ->requiresConfirmation()
                         ->action(function (Sales $record) {
                             $record->updateQuietly(['device_id' => null]);
-                            Notification::make()->success()->title('Perangkat berhasil dilepas!')->send();
+                            Notification::make()
+                                ->success()
+                                ->title('Device ID berhasil dilepas!')
+                                ->send();
                         }),
 
                 ])->label('Menu')->button()->color('gray'),

@@ -26,7 +26,7 @@ class NotificationController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Daftar notifikasi berhasil diambil',
-                'data'    => NotificationResource::collection($notifications) // Menggunakan Resource
+                'data'    => NotificationResource::collection($notifications) 
             ], 200);
             
         } catch (\Exception $e) {
@@ -116,4 +116,31 @@ class NotificationController extends Controller
             ], 500);
         }
     }
+    public function updateToken(Request $request): JsonResponse
+{
+    try {
+        $request->validate([
+            'fcm_token' => 'required|string'
+        ]);
+
+        // Mengambil user/sales yang sedang login
+        $user = Auth::user(); 
+        
+        // Pastikan kolom 'fcm_token' sudah ada di tabel users/sales Anda
+        $user->update([
+            'fcm_token' => $request->fcm_token
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'FCM Token berhasil diperbarui'
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal memperbarui token: ' . $e->getMessage(),
+        ], 500);
+    }
+}
 }

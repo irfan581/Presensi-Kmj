@@ -1,19 +1,19 @@
 <x-filament-panels::page.simple>
     @push('styles')
     <style>
-    /* Definisi Variabel Warna */
+    /* KONFIGURASI LIGHT MODE (Default) */
     :root {
-        /* Light Mode */
-        --bg: #f4f6fb;
+        --bg: #f3f4f6;
         --card: #ffffff;
-        --bd: rgba(0, 0, 0, .08);
-        --inp: #f9fafb;
+        --bd: rgba(0, 0, 0, 0.08);
+        --inp: #ffffff;
         --txt: #111827;
         --mut: #6b7280;
         --acc: #ea580c;
+        --shadow: rgba(0, 0, 0, 0.1);
     }
 
-    /* Dark Mode (Otomatis saat class .dark aktif di HTML) */
+    /* KONFIGURASI DARK MODE */
     .dark {
         --bg: #09090b;
         --card: #18181b;
@@ -21,57 +21,47 @@
         --inp: #27272a;
         --txt: #fafafa;
         --mut: #a1a1aa;
+        --acc: #f97316;
+        /* Sedikit lebih terang di dark mode agar kontras */
+        --shadow: rgba(0, 0, 0, 0.5);
     }
 
-    /* Layout Lock Center & No Scroll */
     body {
         background: var(--bg) !important;
         color: var(--txt) !important;
-        height: 100vh !important;
-        overflow: hidden !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        min-height: 100vh !important;
         margin: 0 !important;
-        transition: background 0.3s ease;
-        /* Transisi halus saat ganti mode */
+        transition: background 0.3s ease, color 0.3s ease;
     }
 
-    .fi-simple-layout {
-        width: 100% !important;
-        height: 100% !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-
-    /* Ukuran Wide (650px) */
-    .fi-simple-main-ctn {
-        width: 100% !important;
-        max-width: 650px !important;
-        margin: 0 !important;
-    }
-
+    /* Box Login */
     .fi-simple-main {
         background: var(--card) !important;
         border: 1px solid var(--bd) !important;
-        border-radius: 16px !important;
-        padding: 2.5rem 3.5rem !important;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2) !important;
-        transition: background 0.3s ease, border 0.3s ease;
+        border-radius: 20px !important;
+        padding: 2.5rem !important;
+        box-shadow: 0 25px 50px -12px var(--shadow) !important;
+        transition: all 0.3s ease;
+    }
+
+    .fi-simple-main-ctn {
+        max-width: 450px !important;
     }
 
     /* Branding */
     .kj-brand {
         text-align: center;
         margin-bottom: 2rem;
-        border-bottom: 1px solid var(--bd);
-        padding-bottom: 1.2rem;
     }
 
     .kj-brand-name {
-        font-weight: 800;
-        font-size: 1.6rem;
+        font-weight: 700;
+        font-size: 1.25rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
         color: var(--txt);
     }
 
@@ -81,46 +71,42 @@
     }
 
     .kj-brand-sub {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         color: var(--mut);
         letter-spacing: 0.2em;
-        text-transform: uppercase;
+        margin-top: 0.4rem;
+        font-weight: 500;
     }
 
     /* Input Styling */
-    .fi-fo-field-wrp label {
-        color: var(--txt) !important;
-        font-weight: 500 !important;
-    }
-
     .fi-input-wrp {
         background-color: var(--inp) !important;
         border: 1px solid var(--bd) !important;
-        height: 44px !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
+        transition: border-color 0.2s;
     }
 
-    /* Button */
-    .fi-btn-primary,
+    /* Menyesuaikan warna label Filament agar terlihat di kedua mode */
+    .fi-fo-field-wrp-label label {
+        color: var(--txt) !important;
+    }
+
+    /* Button Styling */
     button[type="submit"] {
         background-color: var(--acc) !important;
-        height: 44px !important;
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3) !important;
+        border-radius: 12px !important;
+        height: 48px !important;
+        font-weight: 700 !important;
+        color: white !important;
+        box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.3) !important;
     }
 
-    /* Footer */
-    .kj-footer {
-        margin-top: 2rem;
-        padding-top: 1rem;
-        border-top: 1px solid var(--bd);
-        font-size: 0.75rem;
-        color: var(--mut);
-        display: flex;
-        justify-content: space-between;
+    button[type="submit"]:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
     }
 
+    /* Sembunyikan Header Default */
     .fi-simple-header,
     .fi-simple-header-heading {
         display: none !important;
@@ -129,17 +115,18 @@
     @endpush
 
     <div class="kj-brand">
-        <div class="kj-brand-name">Kembar <em>Jaya</em></div>
-        <div class="kj-brand-sub">Sales Management System</div>
+        <img src="{{ asset('images/login.png') }}" style="height: 4.5rem; margin: 0 auto 1.2rem; display: block;"
+            alt="Logo KMJ">
+
+        <div class="kj-brand-name">Admin Sales <em>KMJ</em></div>
+        <div class="kj-brand-sub">MANAGEMENT SYSTEM</div>
     </div>
 
     <x-filament-panels::form wire:submit="authenticate">
         {{ $this->form }}
-        <x-filament-panels::form.actions :actions="$this->getCachedFormActions()" :full-width="true" />
-    </x-filament-panels::form>
 
-    <div class="kj-footer">
-        <span>&copy; {{ date('Y') }} Kembar Jaya</span>
-        <span>v1.0.0</span>
-    </div>
+        <div class="mt-6">
+            <x-filament-panels::form.actions :actions="$this->getCachedFormActions()" :full-width="true" />
+        </div>
+    </x-filament-panels::form>
 </x-filament-panels::page.simple>

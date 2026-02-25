@@ -3,11 +3,9 @@
 namespace App\Http\Requests\Api;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
-/**
- * ProfileRequest — untuk update foto profil dan alamat
- * Endpoint: POST /api/update-profile
- */
 class ProfileRequest extends FormRequest
 {
     public function authorize(): bool
@@ -17,24 +15,22 @@ class ProfileRequest extends FormRequest
 
     public function rules(): array
     {
-        // ✅ OPT: Pisahkan rules berdasarkan route name
-        // Lebih eksplisit dan tidak bergantung pada URL string yang bisa berubah
-        if ($this->routeIs('profile.change-password')) {
+        // ✅ FIX: Cek field yang ada di request, bukan route name
+        // Lebih reliable karena tidak bergantung pada nama route yang bisa typo
+        if ($this->has('old_password') || $this->has('new_password')) {
             return $this->changePasswordRules();
         }
 
         if ($this->routeIs('profile.reset-password')) {
-            return []; // Reset tidak butuh input — pakai NIK sebagai password
+            return [];
         }
 
-        // Default: update profile (foto/alamat)
         return $this->updateProfileRules();
     }
 
     private function updateProfileRules(): array
     {
         return [
-            // ✅ OPT: Minimal 1 field harus diisi — cegah request kosong
             'foto_profil' => 'nullable|image|mimes:jpeg,jpg,png|max:2048',
             'alamat'      => 'nullable|string|max:500',
         ];
@@ -44,8 +40,6 @@ class ProfileRequest extends FormRequest
     {
         return [
             'old_password'              => 'required|string',
-            // ✅ OPT: new_password_confirmation adalah field dari Flutter
-            // 'confirmed' auto-check field 'new_password_confirmation'
             'new_password'              => 'required|string|min:8|confirmed',
             'new_password_confirmation' => 'required|string',
         ];
@@ -66,18 +60,27 @@ class ProfileRequest extends FormRequest
         ];
     }
 
-    // ✅ OPT: Trim whitespace dari input teks — cegah data kotor di DB
+    // Tangkap error validasi dan return JSON
+    protected function failedValidation(Validator $validator)
+    {
+        throw new HttpResponseException(
+            response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors'  => $validator->errors(),
+            ], 422)
+        );
+    }
+
     protected function prepareForValidation(): void
     {
         $toTrim = ['old_password', 'new_password', 'new_password_confirmation', 'alamat'];
-
         $trimmed = [];
         foreach ($toTrim as $field) {
             if ($this->has($field) && is_string($this->input($field))) {
                 $trimmed[$field] = trim($this->input($field));
             }
         }
-
         if (!empty($trimmed)) {
             $this->merge($trimmed);
         }

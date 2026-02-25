@@ -2,6 +2,9 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\CustomLogin;
+use App\Models\User;
+use App\Livewire\GantiPassword;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -10,6 +13,8 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Facades\FilamentView;
+use Illuminate\Support\Facades\Blade;
 use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -27,53 +32,55 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login() 
+            ->login(CustomLogin::class) 
+            ->darkMode(true)
             
-            // --- IDENTITAS & BRANDING ---
-            ->brandName('Kembar Jaya') 
+            // ✅ Menggunakan view kustom untuk area Logo & Nama
+            ->brandLogo(fn () => view('filament.components.brand'))
+            
+            ->favicon(asset('images/login.png'))
+            
             ->colors([
                 'primary' => Color::Amber,
-                'gray' => Color::Zinc, 
+                'gray'    => Color::Zinc,
             ])
-            ->renderHook('panels::footer.before', fn () => null)
-
-            // --- PENGATURAN NOTIFIKASI (WAJIB) ---
-            // Baris ini sekarang aman karena tabel 'notifications' (tgl 16) sudah dibuat
-            ->databaseNotifications() 
-            ->databaseNotificationsPolling('30s') 
             
-            // --- UI & UX OPTIMIZATION ---
-            ->sidebarCollapsibleOnDesktop() 
-            ->globalSearchKeyBindings(['command+k', 'ctrl+k']) 
-            ->maxContentWidth('full') 
-            
-            // --- PLUGINS ---
-            ->plugins([
-                BreezyCore::make()
-                    ->myProfile(
-                        shouldRegisterUserMenu: true, 
-                        shouldRegisterNavigation: false, 
-                        hasAvatars: false, 
-                    )
-                    ->enableTwoFactorAuthentication(
-                        force: false 
-                    )
-            ])
+            ->databaseNotifications()
+            ->sidebarCollapsibleOnDesktop()
+            ->maxContentWidth('full')
 
-            // --- RESOURCE & PAGE DISCOVERY ---
+            // ✅ Pastikan discover tetap ada agar menu & dashboard muncul
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
+            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
+
             ->pages([
                 Pages\Dashboard::class,
             ])
-
-            // --- WIDGETS ---
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
+            
             ->widgets([
-                // Kosong: agar Widget Statistik & Tabel Kustom Anda berada di posisi paling atas
+                Widgets\AccountWidget::class,
+                // Widgets\FilamentInfoWidget::class, // Sudah dibuang
             ])
 
-            // --- MIDDLEWARE ---
+            ->plugins([
+                BreezyCore::make()
+                    ->myProfile(
+                        shouldRegisterUserMenu: true,
+                        shouldRegisterNavigation: false,
+                        hasAvatars: true,
+                        slug: 'my-profile'
+                    )
+                    ->avatarUploadComponent(fn($fileUpload) => $fileUpload->directory('avatars'))
+                    ->enableTwoFactorAuthentication(force: false)
+                    ->passwordUpdateRules([
+                        User::passwordRules()
+                    ])
+                    ->myProfileComponents([
+                        'update_password' => GantiPassword::class,
+                    ])
+            ])
+            
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -88,5 +95,14 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ]);
+    }
+
+    public function boot(): void
+    {
+        // Bersihkan CSS ::after yang tadi agar tidak menumpuk
+        FilamentView::registerRenderHook(
+            'panels::head.end',
+            fn (): string => Blade::render('<style>body { transition: background-color 0.3s ease; }</style>'),
+        );
     }
 }

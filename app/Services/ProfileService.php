@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Sales;
 use App\Traits\UploadGambar;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 
 class ProfileService
@@ -21,7 +22,9 @@ class ProfileService
 
         if ($file) {
             // Hapus foto lama sebelum upload baru
-            $this->deleteImage($user->foto_profil);
+            $this->deleteOldPhoto($user->foto_profil);
+            
+            // Upload foto baru
             $path = $this->uploadCompressed($file, 'foto-sales');
             if ($path) {
                 $toUpdate['foto_profil'] = $path;
@@ -29,7 +32,6 @@ class ProfileService
         }
 
         if (!empty($toUpdate)) {
-            // ✅ OPT: updateQuietly — tidak trigger events/observers
             $user->updateQuietly($toUpdate);
         }
 
@@ -42,7 +44,6 @@ class ProfileService
             throw new Exception('Password lama tidak sesuai.');
         }
 
-        // ✅ OPT: updateQuietly — ganti password tidak perlu trigger events
         $user->updateQuietly([
             'password' => Hash::make($data['new_password']),
         ]);
@@ -50,17 +51,28 @@ class ProfileService
 
     public function resetPassword(Sales $user): string
     {
-        // ✅ FIX SECURITY: Jangan return NIK sebagai password baru di response
-        // NIK bisa bocor via log/sniff. Generate random password saja.
-        // Tapi karena sistem ini pakai NIK sebagai default, kita tetap NIK
-        // tapi controller TIDAK perlu expose ke Flutter — cukup pesan sukses.
         $passwordDefault = $user->nik;
 
         $user->updateQuietly([
             'password' => Hash::make($passwordDefault),
         ]);
 
-        // ✅ Return hanya untuk keperluan admin — controller putuskan expose atau tidak
         return $passwordDefault;
+    }
+
+    // ✅ ADDED: Method untuk hapus foto lama
+    protected function deleteOldPhoto(?string $oldPath): void
+    {
+        // Skip jika path kosong atau URL eksternal (ui-avatars)
+        if (!$oldPath || str_starts_with($oldPath, 'http')) {
+            return;
+        }
+
+        $disk = Storage::disk('public');
+        
+        // Hapus file jika exists
+        if ($disk->exists($oldPath)) {
+            $disk->delete($oldPath);
+        }
     }
 }

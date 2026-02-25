@@ -14,17 +14,13 @@ class IzinController extends Controller
 {
     protected $izinService;
 
-    /**
-     * Dependency Injection untuk IzinService.
-     */
     public function __construct(IzinService $izinService)
     {
         $this->izinService = $izinService;
     }
 
     /**
-     * Mengambil riwayat izin sales yang sedang login.
-     * Mendukung filter status, start_date, dan end_date.
+     * Riwayat izin dengan filter
      */
     public function riwayat(Request $request): JsonResponse
     {
@@ -38,7 +34,6 @@ class IzinController extends Controller
                 ], 401);
             }
 
-            // Menggunakan query params untuk filter di Flutter
             $riwayat = $this->izinService->getRiwayatIzin(
                 (int) $salesId,
                 $request->query('status'),
@@ -51,7 +46,6 @@ class IzinController extends Controller
                 'message' => 'Data riwayat berhasil diambil',
                 'data'    => IzinResource::collection($riwayat),
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -61,16 +55,21 @@ class IzinController extends Controller
     }
 
     /**
-     * Memproses pengajuan izin baru.
-     * Validasi dilakukan otomatis oleh IzinRequest.
+     * Ajukan izin baru
      */
     public function ajukanIzin(IzinRequest $request): JsonResponse
     {
         try {
-            // Service akan menangani penyimpanan dan dispatch Job foto
+            // 1. Ambil data yang sudah lolos validasi
+            $validatedData = $request->validated();
+            
+            // 2. TAMBAHAN PENTING: Sisipkan sales_id dari token Auth
+            $validatedData['sales_id'] = Auth::id();
+
+            // 3. Lempar ke service
             $izin = $this->izinService->ajukanIzin(
-                $request->validated(),
-                $request->file('bukti_foto'),
+                $validatedData,
+                $request->file('bukti_foto')
             );
 
             return response()->json([
@@ -78,7 +77,6 @@ class IzinController extends Controller
                 'message' => 'Pengajuan izin berhasil dikirim',
                 'data'    => new IzinResource($izin),
             ], 201);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -86,10 +84,31 @@ class IzinController extends Controller
             ], 500);
         }
     }
-
     /**
-     * Boilerplate untuk standard API Resource (Index & Store)
+     * Cek izin aktif hari ini
+     * Dipakai Flutter untuk update UI tombol absen
      */
+    public function cekIzinHariIni(Request $request): JsonResponse
+    {
+        try {
+            $salesId  = Auth::id();
+            $izinAktif = $this->izinService->getIzinAktif($salesId);
+            $cekBoleh  = $this->izinService->cekBolehAbsenMasuk($salesId);
+
+            return response()->json([
+                'success'    => true,
+                'izin_aktif' => $izinAktif ? new IzinResource($izinAktif) : null,
+                'boleh_absen' => $cekBoleh['boleh'],
+                'keterangan'  => $cekBoleh['alasan'],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function index(Request $request): JsonResponse
     {
         return $this->riwayat($request);

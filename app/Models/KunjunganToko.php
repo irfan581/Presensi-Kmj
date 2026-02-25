@@ -7,18 +7,25 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Activitylog\Traits\LogsActivity; 
+use Spatie\Activitylog\LogOptions;         
 
 class KunjunganToko extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'kunjungan_tokos';
 
     protected $fillable = [
-        'sales_id', 'nama_toko', 'location',
-        'lat', 'lng',
-        'foto_kunjungan', 'keterangan',
-        'is_suspicious', 'suspicious_reason',
+        'sales_id', 
+        'nama_toko', 
+        'location',
+        'lat', 
+        'lng',
+        'foto_kunjungan', 
+        'keterangan',
+        'is_suspicious', 
+        'suspicious_reason',
     ];
 
     protected $hidden = [];
@@ -32,6 +39,13 @@ class KunjunganToko extends Model
     ];
 
     protected $appends = ['foto_kunjungan_url'];
+    public function getActivitylogOptions(): LogOptions
+    {
+        return (new LogOptions())
+            ->logFillable()           
+            ->logOnlyDirty()          
+            ->dontSubmitEmptyLogs();  
+    }
 
     // ===========================================================
     // ACCESSOR
@@ -47,18 +61,10 @@ class KunjunganToko extends Model
         return $disk->url($this->foto_kunjungan);
     }
 
-    // ===========================================================
-    // RELASI
-    // ===========================================================
-
     public function sales(): BelongsTo
     {
         return $this->belongsTo(Sales::class, 'sales_id');
     }
-
-    // ===========================================================
-    // SCOPES
-    // ===========================================================
 
     public function scopeHariIni($query)
     {
@@ -70,5 +76,5 @@ class KunjunganToko extends Model
         return $query->where('sales_id', $salesId);
     }
 
-    // booted() dihapus — pakai KunjunganTokoObserver
+ 
 }

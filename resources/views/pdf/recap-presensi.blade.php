@@ -16,7 +16,6 @@
         line-height: 1.5;
     }
 
-    /* Header dengan aksen Hijau Emerald */
     .header {
         text-align: center;
         border-bottom: 3px solid #10b981;
@@ -34,25 +33,40 @@
 
     .company-name {
         color: #d97706;
-        /* Oranye Gelap agar lebih terbaca */
         font-size: 12px;
         font-weight: bold;
         margin-top: 3px;
     }
 
-    /* Tabel Informasi */
+    /* Tabel Informasi & Ringkasan */
     .info-table {
         width: 100%;
         margin-bottom: 15px;
         background-color: #f0fdf4;
-        /* Hijau sangat muda */
-        padding: 8px;
+        padding: 10px;
         border: 1px solid #d1fae5;
         border-radius: 4px;
     }
 
-    .info-table td {
-        padding: 2px 5px;
+    .summary-box {
+        background-color: #ffffff;
+        border: 1px solid #10b981;
+        padding: 5px 10px;
+        display: inline-block;
+        margin-top: 5px;
+        border-radius: 4px;
+    }
+
+    .summary-item {
+        display: inline-block;
+        margin-right: 20px;
+        font-size: 11px;
+    }
+
+    .summary-count {
+        color: #059669;
+        font-weight: bold;
+        font-size: 13px;
     }
 
     /* Tabel Utama */
@@ -75,14 +89,12 @@
         border: 1px solid #e5e7eb;
         padding: 6px 5px;
         vertical-align: middle;
-        /* Tengah secara vertikal agar rapi */
     }
 
     .main-table tr:nth-child(even) {
         background-color: #f9fafb;
     }
 
-    /* Styling Badge */
     .badge {
         padding: 3px 6px;
         border-radius: 3px;
@@ -98,22 +110,13 @@
         background-color: #059669;
     }
 
-    /* Hijau Tua */
     .bg-kunjungan {
         background-color: #d97706;
     }
 
-    /* Oranye Gelap */
     .bg-izin {
         background-color: #4f46e5;
     }
-
-    /* Indigo */
-    .bg-danger {
-        background-color: #dc2626;
-    }
-
-    /* Merah */
 
     .footer {
         position: fixed;
@@ -128,10 +131,10 @@
     }
 
     .suspicious-text {
-        margin-top: 3px;
         color: #dc2626;
         font-weight: bold;
         font-size: 7px;
+        margin-top: 2px;
     }
 
     .location-link {
@@ -150,18 +153,28 @@
 
     <table class="info-table">
         <tr>
-            <td width="12%"><strong>Subjek</strong></td>
-            <td width="38%">: <span
-                    style="color: #065f46; font-weight:bold;">{{ $sales ? $sales->nama : 'SELURUH TIM SALES' }}</span>
-            </td>
+            <td width="12%"><strong>Nama Sales</strong></td>
+            <td width="38%">: <span style="color: #065f46; font-weight:bold;">{{ $sales->nama ?? '-' }}</span></td>
             <td width="12%"><strong>Periode</strong></td>
             <td width="38%">: {{ $date_range }}</td>
         </tr>
         <tr>
             <td><strong>NIK / Area</strong></td>
-            <td>: {{ $sales ? ($sales->nik . ' / ' . $sales->area) : 'Semua Area' }}</td>
+            <td>: {{ $sales->nik ?? '-' }} / {{ $sales->area ?? '-' }}</td>
             <td><strong>Dicetak Oleh</strong></td>
             <td>: {{ auth()->user()->name }}</td>
+        </tr>
+        <tr>
+            <td colspan="4">
+                <div class="summary-box">
+                    <div class="summary-item">
+                        Total Kehadiran: <span class="summary-count">{{ $total_hadir }}</span> Hari
+                    </div>
+                    <div class="summary-item">
+                        Total Kunjungan Toko: <span class="summary-count">{{ $total_kunjungan }}</span> Toko
+                    </div>
+                </div>
+            </td>
         </tr>
     </table>
 
@@ -169,11 +182,10 @@
         <thead>
             <tr>
                 <th width="12%">Waktu</th>
-                @if(!$sales) <th width="15%">Nama Sales</th> @endif
-                <th width="8%">Tipe</th>
-                <th width="20%">Detail Aktivitas</th>
-                <th width="22%">Lokasi GPS</th>
-                <th width="23%">Keterangan</th>
+                <th width="10%">Tipe</th>
+                <th width="25%">Detail Aktivitas</th>
+                <th width="25%">Lokasi GPS</th>
+                <th width="28%">Keterangan</th>
             </tr>
         </thead>
         <tbody>
@@ -183,10 +195,6 @@
                     {{ \Carbon\Carbon::parse($item['waktu'])->format('d/m/y') }}<br>
                     <strong>{{ \Carbon\Carbon::parse($item['waktu'])->format('H:i') }}</strong>
                 </td>
-
-                @if(!$sales)
-                <td><strong>{{ $item['sales_name'] }}</strong></td>
-                @endif
 
                 <td>
                     @php
@@ -203,9 +211,7 @@
                 <td>
                     <strong>{{ $item['detail'] }}</strong>
                     @if(isset($item['suspicious']) && $item['suspicious'])
-                    <div class="suspicious-text">
-                        {{ strtoupper($item['reason'] ?? 'FAKE GPS') }}
-                    </div>
+                    <div class="suspicious-text">TERINDIKASI FAKE GPS / MOCK</div>
                     @endif
                 </td>
 
@@ -221,7 +227,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="{{ !$sales ? 6 : 5 }}" align="center" style="padding: 20px; color: #9ca3af;">
+                <td colspan="5" align="center" style="padding: 20px; color: #9ca3af;">
                     Tidak ditemukan data aktivitas untuk periode ini.
                 </td>
             </tr>
@@ -230,7 +236,8 @@
     </table>
 
     <div class="footer">
-        Sistem Absensi CV. KEMBAR JAYA MANDIRI | Dicetak: {{ now()->translatedFormat('d F Y, H:i') }}
+        Sistem Absensi CV. KEMBAR JAYA MANDIRI | Halaman: {PAGENO} | Dicetak:
+        {{ now()->translatedFormat('d F Y, H:i') }}
     </div>
 </body>
 
