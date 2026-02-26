@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\NotifikasiSales;
-use App\Http\Resources\Api\NotificationResource; // Import Resource baru
+use App\Http\Resources\Api\NotificationResource; 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -96,7 +96,62 @@ class NotificationController extends Controller
     }
 
     /**
-     * Ambil jumlah notifikasi yang belum dibaca (Unread Count)
+     * Hapus satu notifikasi tertentu (Baru)
+     */
+    public function destroy($id): JsonResponse
+    {
+        try {
+            $currentSalesId = (int) Auth::id();
+
+            $notification = NotifikasiSales::where('id', $id)
+                ->where('sales_id', $currentSalesId)
+                ->first();
+
+            if ($notification) {
+                $notification->delete();
+                
+                return response()->json([
+                    'success' => true, 
+                    'message' => 'Notifikasi berhasil dihapus'
+                ], 200);
+            }
+
+            return response()->json([
+                'success' => false, 
+                'message' => 'Notifikasi tidak ditemukan'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Gagal menghapus: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Hapus SEMUA notifikasi (Baru)
+     */
+    public function deleteAll(): JsonResponse
+    {
+        try {
+            $currentSalesId = (int) Auth::id();
+
+            $deletedCount = NotifikasiSales::where('sales_id', $currentSalesId)->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Semua notifikasi (' . $deletedCount . ') berhasil dibersihkan'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Gagal membersihkan notifikasi'
+            ], 500);
+        }
+    }
+
+    /**
+     * Ambil jumlah belum dibaca
      */
     public function getUnreadCount(): JsonResponse
     {
@@ -116,31 +171,28 @@ class NotificationController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Update Token FCM
+     */
+    // Bagian updateToken tetap sama, tapi pastikan kolom di tabel users adalah 'fcm_token'
     public function updateToken(Request $request): JsonResponse
-{
-    try {
-        $request->validate([
-            'fcm_token' => 'required|string'
-        ]);
-
-        // Mengambil user/sales yang sedang login
-        $user = Auth::user(); 
+        {
+            try {
+                $request->validate(['fcm_token' => 'required|string']);
         
-        // Pastikan kolom 'fcm_token' sudah ada di tabel users/sales Anda
-        $user->update([
-            'fcm_token' => $request->fcm_token
-        ]);
+                $user = Auth::user(); 
+                    $user->update(['fcm_token' => $request->fcm_token]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'FCM Token berhasil diperbarui'
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Gagal memperbarui token: ' . $e->getMessage(),
-        ], 500);
+                return response()->json([
+                    'success' => true,
+                        'message' => 'FCM Token berhasil diperbarui'
+                ], 200);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                        'message' => 'Gagal memperbarui token: ' . $e->getMessage()
+            ], 500);
+        }
     }
-}
 }

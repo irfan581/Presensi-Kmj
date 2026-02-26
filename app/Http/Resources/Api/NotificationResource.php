@@ -4,16 +4,17 @@ namespace App\Http\Resources\Api;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Carbon\Carbon;
 
 class NotificationResource extends JsonResource
 {
-    /**
-     * Transform notifikasi ke array untuk API response
-     */
     public function toArray(Request $request): array
     {
+        Carbon::setLocale('id'); // Agar "2 minutes ago" jadi "2 menit yang lalu"
+
         return [
             'id'         => $this->id,
+            'sales_id'   => $this->sales_id,
             'title'      => $this->title,
             'message'    => $this->message,
             'is_read'    => (bool) $this->is_read,
@@ -22,6 +23,4 @@ class NotificationResource extends JsonResource
             'time_ago'   => $this->created_at?->diffForHumans() ?? null,
         ];
     }
-
-    
 }

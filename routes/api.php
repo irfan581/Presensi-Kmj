@@ -28,6 +28,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/read-all', [NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
     Route::post('/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.mark-read');
     Route::post('/update-token', [NotificationController::class, 'updateToken'])->name('notifications.update-token');
+    Route::delete('/delete-all', [NotificationController::class, 'deleteAll'])->name('notifications.delete-all');
+    Route::delete('/{id}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
 });
 
     // ── AUTH ──────────────────────────────────────────────
