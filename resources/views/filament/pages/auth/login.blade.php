@@ -118,7 +118,7 @@
         <img src="{{ asset('images/login.png') }}" style="height: 4.5rem; margin: 0 auto 1.2rem; display: block;"
             alt="Logo KMJ">
 
-        <div class="kj-brand-name">Admin Sales <em>KMJ</em></div>
+        <div class="kj-brand-name">Admin Sales <em>KJM</em></div>
         <div class="kj-brand-sub">MANAGEMENT SYSTEM</div>
     </div>
 
