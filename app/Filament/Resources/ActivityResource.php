@@ -20,7 +20,7 @@ class ActivityResource extends Resource
 {
     protected static ?string $model = Activity::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-arrow-path'; // Icon yang lebih cocok untuk log
+    protected static ?string $navigationIcon = 'heroicon-o-arrow-path';
     
     protected static ?string $navigationGroup = 'Sistem';
 
@@ -70,10 +70,15 @@ class ActivityResource extends Resource
                     ->formatStateUsing(fn ($state) => str_replace('App\Models\\', '', $state ?? 'System'))
                     ->description(fn (Activity $record): string => "ID: {$record->subject_id}"),
 
-                // Detail Ringkas Perubahan (Hanya menampilkan key apa yang berubah)
+                // ✅ FIX: Tambahkan pengecekan is_array() agar tidak error
                 TextColumn::make('properties.attributes')
                     ->label('Yang Diubah')
-                    ->formatStateUsing(fn ($state) => $state ? implode(', ', array_keys($state)) : '-')
+                    ->formatStateUsing(function ($state) {
+                        if (is_array($state)) {
+                            return implode(', ', array_keys($state));
+                        }
+                        return '-';
+                    })
                     ->limit(30)
                     ->color('gray')
                     ->size('xs'),
@@ -86,6 +91,8 @@ class ActivityResource extends Resource
                         'created' => 'Penambahan',
                         'updated' => 'Perubahan',
                         'deleted' => 'Penghapusan',
+                        'login'   => 'Login',
+                        'logout'  => 'Logout',
                     ]),
                 SelectFilter::make('subject_type')
                     ->label('Modul')
@@ -102,9 +109,6 @@ class ActivityResource extends Resource
             ->bulkActions([]);
     }
 
-    /**
-     * 🔥 POLESAN MAUT: Membuat tampilan detail (View) jadi cantik
-     */
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist
@@ -122,20 +126,19 @@ class ActivityResource extends Resource
                 Section::make('Detail Perubahan Data')
                     ->description('Perbandingan data sebelum dan sesudah perubahan')
                     ->schema([
-                        // Menampilkan data baru
+                        // ✅ FIX: Gunakan keyValue() untuk data dinamis
                         KeyValueEntry::make('properties.attributes')
                             ->label('Data Sekarang / Baru')
                             ->columns(2)
                             ->keyLabel('Kolom')
                             ->valueLabel('Nilai Baru'),
                         
-                        // Menampilkan data lama (jika ada)
                         KeyValueEntry::make('properties.old')
                             ->label('Data Sebelumnya')
                             ->columns(2)
                             ->keyLabel('Kolom')
                             ->valueLabel('Nilai Lama')
-                            ->visible(fn ($record) => isset($record->properties['old'])),
+                            ->visible(fn ($record) => isset($record->properties['old']) && is_array($record->properties['old'])),
                     ])->columns(2)
             ]);
     }
@@ -144,6 +147,7 @@ class ActivityResource extends Resource
     {
         return [
             'index' => Pages\ListActivities::route('/'),
+            'view' => Pages\ViewActivity::route('/{record}'),
         ];
     }
 
@@ -153,7 +157,6 @@ class ActivityResource extends Resource
         /** @var \App\Models\User|null $user */
         if (!$user || $user->role !== 'owner') return false;
 
-        // Log tidak boleh diedit/dihapus sama sekali
         if (in_array($action, ['create', 'update', 'delete', 'deleteAny'])) return false;
 
         return parent::can($action, $record);
