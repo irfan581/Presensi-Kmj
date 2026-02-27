@@ -11,7 +11,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
-use Filament\Infolists\Components\KeyValueEntry;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Infolist;
@@ -38,73 +37,51 @@ class ActivityResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('created_at')
-                    ->label('Waktu')
+                    ->label('Waktu Kejadian')
                     ->dateTime('d M Y, H:i')
                     ->sortable(),
 
                 TextColumn::make('causer.name')
-                    ->label('User')
+                    ->label('Nama User')
                     ->searchable()
                     ->default('System')
                     ->description(fn (Activity $record): string => $record->causer->role ?? 'System'),
 
                 TextColumn::make('description')
-                    ->label('Aksi')
+                    ->label('Aktivitas')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'created' => 'success',
-                        'updated' => 'warning',
-                        'deleted' => 'danger',
-                        'login'   => 'info',
-                        default => 'gray',
+                        'login'   => 'success',
+                        'logout'  => 'gray',
+                        default   => 'info',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'created' => 'Tambah',
-                        'updated' => 'Ubah',
-                        'deleted' => 'Hapus',
-                        default => ucfirst($state),
+                        'login'   => 'Masuk (Login)',
+                        'logout'  => 'Keluar (Logout)',
+                        default   => ucfirst($state),
                     }),
 
-                TextColumn::make('subject_type')
-                    ->label('Modul / Data')
-                    ->formatStateUsing(fn ($state) => str_replace('App\Models\\', '', $state ?? 'System'))
-                    ->description(fn (Activity $record): string => "ID: {$record->subject_id}"),
-
-                // ✅ FIX: Tambahkan pengecekan is_array() agar tidak error
-                TextColumn::make('properties.attributes')
-                    ->label('Yang Diubah')
-                    ->formatStateUsing(function ($state) {
-                        if (is_array($state)) {
-                            return implode(', ', array_keys($state));
-                        }
-                        return '-';
-                    })
-                    ->limit(30)
+                // Menampilkan informasi browser/perangkat jika tersedia
+                TextColumn::make('properties.user_agent')
+                    ->label('Perangkat / Browser')
+                    ->wrap()
+                    ->limit(50)
+                    ->size('xs')
                     ->color('gray')
-                    ->size('xs'),
+                    ->default('-'),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
                 SelectFilter::make('description')
-                    ->label('Jenis Kejadian')
+                    ->label('Jenis Aktivitas')
                     ->options([
-                        'created' => 'Penambahan',
-                        'updated' => 'Perubahan',
-                        'deleted' => 'Penghapusan',
                         'login'   => 'Login',
                         'logout'  => 'Logout',
                     ]),
-                SelectFilter::make('subject_type')
-                    ->label('Modul')
-                    ->options(fn () => Activity::groupBy('subject_type')
-                        ->pluck('subject_type', 'subject_type')
-                        ->mapWithKeys(fn ($item) => [$item => str_replace('App\Models\\', '', $item)])
-                        ->toArray()
-                    ),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()
-                    ->label('Lihat Detail'),
+                    ->label('Lihat'),
             ])
             ->bulkActions([]);
     }
@@ -113,33 +90,31 @@ class ActivityResource extends Resource
     {
         return $infolist
             ->schema([
-                Section::make('Informasi Aktivitas')
-                    ->columns(3)
+                Section::make('Informasi Sesi Login')
+                    ->description('Detail waktu masuk dan keluar pengguna')
+                    ->columns(2)
                     ->schema([
-                        TextEntry::make('causer.name')->label('Pelaku'),
-                        TextEntry::make('description')->label('Jenis Aksi')->badge(),
-                        TextEntry::make('created_at')->label('Waktu Kejadian')->dateTime(),
-                        TextEntry::make('subject_type')->label('Modul')->formatStateUsing(fn($state) => str_replace('App\Models\\', '', $state)),
-                        TextEntry::make('subject_id')->label('ID Data'),
-                    ]),
-                
-                Section::make('Detail Perubahan Data')
-                    ->description('Perbandingan data sebelum dan sesudah perubahan')
-                    ->schema([
-                        // ✅ FIX: Gunakan keyValue() untuk data dinamis
-                        KeyValueEntry::make('properties.attributes')
-                            ->label('Data Sekarang / Baru')
-                            ->columns(2)
-                            ->keyLabel('Kolom')
-                            ->valueLabel('Nilai Baru'),
+                        TextEntry::make('causer.name')
+                            ->label('Nama Pengguna')
+                            ->weight('bold'),
                         
-                        KeyValueEntry::make('properties.old')
-                            ->label('Data Sebelumnya')
-                            ->columns(2)
-                            ->keyLabel('Kolom')
-                            ->valueLabel('Nilai Lama')
-                            ->visible(fn ($record) => isset($record->properties['old']) && is_array($record->properties['old'])),
-                    ])->columns(2)
+                        TextEntry::make('description')
+                            ->label('Status Aktivitas')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'login'   => 'success',
+                                'logout'  => 'gray',
+                                default   => 'info',
+                            }),
+
+                        TextEntry::make('created_at')
+                            ->label('Waktu (Jam & Tanggal)')
+                            ->dateTime('d F Y, H:i:s'),
+
+                        TextEntry::make('causer.email')
+                            ->label('Email Akun')
+                            ->color('gray'),
+                    ]),
             ]);
     }
 
@@ -151,6 +126,7 @@ class ActivityResource extends Resource
         ];
     }
 
+    // Hanya Owner yang bisa akses, dan hanya bisa VIEW (tidak bisa Edit/Hapus/Tambah)
     public static function can(string $action, ?Model $record = null): bool
     {
         $user = Auth::user();
